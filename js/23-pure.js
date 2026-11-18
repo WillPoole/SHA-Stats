@@ -397,8 +397,16 @@ function pureAbout() {
 // ---------------------------------------------------------------- sweeper: no column or box that names a model number
 /* Table columns, number boxes and sections whose title is one of these are removed wherever they appear (pages drawn
    later, tabs, box scores loaded on demand), so a model number can't slip through a page this file didn't rewrite. */
-const PURE_COLS = /^(est\.? ?(ca|pa)|ca|pa|proj\.? peak|peak|peak age|growth left|war|war\/82|nhl war|war at peak|exp\.? war|exp\.? war this season|worth|surplus|surplus over the deal|value|value per season|war per \$1m|slot avg|above slot|beat slot|per pick|impact|nhl impact|off|def|fin|play|offence %|defence %|ixg|ixg\/60|xg|xga|xgf|g−xg|g-xg|gsax|gsax\/100|gsax\/60|top war|finishing|def\. war|gar|ours|our rank|tier|scout tier|role|game score|gs|ca in \d+ yrs?|fut)$/i;
+const PURE_COLS = /^(est\.? ?(ca|pa)|ca|pa|proj\.? peak|peak|peak age|growth left|war|war\/82|nhl war|war at peak|exp\.? war|exp\.? war this season|worth|surplus|surplus over the deal|value|value per season|war per \$1m|slot avg|above slot|beat slot|per pick|impact|nhl impact|off|def|fin|play|offence %|defence %|ixg|ixg\/60|xg|xga|xgf|g ?[−-] ?xg|xg ?[−-] ?ga|gsax|gsax\/100|gsax\/60|top war|finishing|def\. war|gar|ours|our rank|tier|scout tier|role|game score|gs|ca in \d+ yrs?|fut)$/i;
 const PURE_BOX = /\b(WAR|xG|GSAx|est\. ?CA|est\. ?PA|potential|projected|projection|peak|surplus|impact|scout|underrated|game score)\b/i;
+/* Shot-map zone tips: drop the expected-goals line (the tip lives outside #view, so the sweeper never sees it). */
+if (PURE) {
+  const _showTip = showTip;
+  showTip = function (e, html) {
+    return _showTip(e, String(html).replace(/<div class="row[^"]*"><span>[^<]*(Expected goals|xG)[^<]*<\/span>.*?<\/div>/g, ""));
+  };
+}
+
 function pureSweep(root) {
   // the Players page subtitle ends with a pointer to the models
   root.querySelectorAll("p.lede").forEach(el => {
