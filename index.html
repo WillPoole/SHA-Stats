@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHA Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script>
+/* the stored theme before the (large) data file loads, so a dark page doesn't flash light */
+try { const t = localStorage.getItem("ehm-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* storage blocked */ }
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#/">SHA Stats</a>
+    <nav aria-label="Main">
+      <a href="#/" data-nav="home">Home</a>
+      <a href="#/players" data-nav="players">Players</a>
+      <a href="#/teams" data-nav="teams">Teams</a>
+      <a href="#/gms" data-nav="gms">GMs</a>
+      <div class="navmenu">
+        <button type="button" class="navmenu-btn" aria-expanded="false" aria-controls="navmenu-draft">Draft <span aria-hidden="true">▾</span></button>
+        <div class="navmenu-list" id="navmenu-draft">
+          <a href="#/draft" data-nav="draft">NHL draft ranking</a>
+          <a href="#/prospects" data-nav="prospects">Prospects</a>
+          <a href="#/draft/past" data-nav="draft">Past drafts</a>
+        </div>
+      </div>
+      <div class="navmenu">
+        <button type="button" class="navmenu-btn" aria-expanded="false" aria-controls="navmenu-league">League <span aria-hidden="true">▾</span></button>
+        <div class="navmenu-list" id="navmenu-league">
+          <a href="#/trades" data-nav="trades">Trades</a>
+          <a href="#/expiring" data-nav="expiring">Expiring contracts</a>
+          <a href="#/playoffs" data-nav="playoffs">Playoffs</a>
+          <a href="#/hof" data-nav="hof">Hall of Fame</a>
+        </div>
+      </div>
+      <a href="#/about" data-nav="about">About the data</a>
+    </nav>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search players" autocomplete="off" aria-label="Search players">
+      <ul id="suggest" role="listbox" hidden></ul>
+    </div>
+    <button id="theme" class="ghost" type="button" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>
+  </div>
+</header>
+<main id="view"><p class="muted wrap page">Loading data…</p></main>
+<footer class="site-foot">
+  <div class="foot-in">
+    <div class="foot-text">
+      <p><b>SHA Stats</b> <span id="foot-snap"></span></p>
+      <p>Everything here is what an EHM client shows, plus simple maths on those numbers: stats, attributes over time,
+        standings, contracts and trades. No estimates or projections.</p>
+    </div>
+    <a class="foot-link" href="#/about" data-nav="about"><b>About the data →</b><span>Where every number comes from, and the data checks</span></a>
+  </div>
+</footer>
+<div id="tip" class="tip" hidden></div>
+<script src="data/ehm_data.js"></script>
+<script src="logos/logos.js"></script>
+<script src="js/00-globals.js"></script>
+<script src="js/01-utils.js"></script>
+<script src="js/02-projection.js"></script>
+<script src="js/03-ui-core.js"></script>
+<script src="js/04-rankings-seasons.js"></script>
+<script src="js/04b-players-page.js"></script>
+<script src="js/05-player-page.js"></script>
+<script src="js/06-awards-comps-war.js"></script>
+<script src="js/07-shots.js"></script>
+<script src="js/08-attributes.js"></script>
+<script src="js/09-chart-export.js"></script>
+<script src="js/09b-draft-evidence.js"></script>
+<script src="js/10-scout-draft.js"></script>
+<script src="js/10b-draft-room.js"></script>
+<script src="js/11-about.js"></script>
+<script src="js/12-value-home.js"></script>
+<script src="js/13-prospects.js"></script>
+<script src="js/14-teams.js"></script>
+<script src="js/15-value-trade.js"></script>
+<script src="js/16-playoffs.js"></script>
+<script src="js/17-rank-nav.js"></script>
+<script src="js/18-leagues.js"></script>
+<script src="js/20-trades.js"></script>
+<script src="js/21-gms.js"></script>
+<script src="js/22-expiring.js"></script>
+<script src="js/23-pure.js"></script>
+<script src="js/19-router.js"></script>
+</body>
+</html>
