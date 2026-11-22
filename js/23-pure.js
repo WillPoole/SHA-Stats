@@ -1,15 +1,9 @@
 "use strict";
 
-// ---------------------------------------------------------------- stats-only sites (D.pure)
-/* Loaded only by the stats-only sites (sites/sha-stats, sites/training-stats), after every other script and before
-   19-router.js. Their data comes from ehm/site/pure.py: no est. CA / PA, projections, WAR, xG, values, scouting or
-   model reports. This file swaps the pages and sections built on those for hockey-data versions, and a sweeper removes
-   any column or box left that names a model number. The normal sites never load it. */
 const PURE = !!D.pure;
 
 if (PURE) {
-  D.players.forEach(p => { p.grpS ||= []; });   // the player card's attribute-group block expects a list
-  // ---- model helpers become harmless stubs (several pages still call them)
+
   project = p => [{ m: 0, date: new Date(D.dates.at(-1) + "T00:00:00"), age: p.age, mid: null, lo: null, hi: null }];
   peakInfo = () => ({ mid: null, lo: null, hi: null, age: null });
   lastMove = () => null;
@@ -26,9 +20,6 @@ if (PURE) {
   renderAttrProjection = () => {};
   drawMini = () => {};
   plTags = () => [];
-  expWar = () => 0;
-  contractValue = () => null;
-  pickValue = () => ({ five: 0, season: 0 });
   findPlayers = (text, n = 8) => {
     const terms = fold(text).split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
@@ -36,7 +27,6 @@ if (PURE) {
       .sort((a, b) => (b.lg === "NHL") - (a.lg === "NHL") || (pureBasic(b)?.p ?? -1) - (pureBasic(a)?.p ?? -1) || a.n.localeCompare(b.n)).slice(0, n);
   };
 
-  // ---- the Players page: tabs and columns without model numbers
   for (let i = PL_TABS.length - 1; i >= 0; i--) if (["traits", "development", "contract"].includes(PL_TABS[i][0])) PL_TABS.splice(i, 1);
   const pts = plCol("p", "P", p => plBasic(p)?.p ?? null, v => `<td class="num">${v == null ? dash : `<b>${v}</b>`}</td>`);
   const basicCols = () => [plRC("pos"), plRC("age"),
@@ -53,23 +43,49 @@ if (PURE) {
       { id: "pm", title: "Plus-minus", sub: "+/-", val: p => plBasic(p)?.pm ?? null, right: v => `<span class="lnum"><b>${signed(v, 0)}</b></span>`, goto: ["overview", "pm", -1], ok: p => p.grp !== "G" },
       plSvpBox("goalies")]),
   };
-  const off = TABS.offence, offCols = off.cols;
-  off.cols = () => offCols().filter(c => c && !["ca", "ixg60", "fin", "offp"].includes(c.k));
-  off.boxes = (b => () => b().filter(x => x.id !== "fin"))(off.boxes);
-  const def = TABS.defence, defCols = def.cols;
-  def.lede = "Ice time, blocks, penalty killing and discipline. Goalies are on their own tab";
-  def.cols = () => defCols().filter(c => c && !["ca", "defwar", "defattr", "defp"].includes(c.k));
-  def.sort = ["toi_gp"];
-  def.boxes = (b => () => b().filter(x => !["def", "dw"].includes(x.id)))(def.boxes);
-  const gl = TABS.goalies, glCols = gl.cols;
-  gl.lede = "Goalies only: games, record, SV% and GAA";
-  gl.cols = () => glCols().filter(c => c && !["ca", "war", "war82", "gsax", "gsax100", "gsa"].includes(c.k) && !String(c.k).startsWith("gs_"));
-  gl.sort = ["svp", "gp"];
-  gl.boxes = (b => () => b().filter(x => !["gsax", "ss"].includes(x.id)))(gl.boxes);
+
+  const rateBox = (id, title, sub, k, d) => ({ id, title, sub, val: p => plRaw(p, k), right: (v, p) => `<span class="lnum">${rankLink(pRankHref("m", k, p.grp, p.k), `<b>${k === "pk_toi" ? rawFmt("toi_gp", v) : fmt(v, d)}</b>`)}</span>`, href: p => pRankHref("m", k, p.grp, p.k) });
+  TABS.offence = {
+    lede: "Scoring, playmaking and shooting. Goalies are on their own tab",
+    cols: () => [plRC("pos"), plRC("age"),
+      plCol("gp", "GP", plGp, plNum(0)), plCol("g", "G", p => plBasic(p)?.g ?? null, plNum(0)), plCol("a", "A", p => plBasic(p)?.a ?? null, plNum(0)), pts,
+      plCol("pgp", "P/GP", p => { const b = plBasic(p); return b?.gp ? b.p / b.gp : null; }, plNum(2), { tip: "Points per game" }),
+      plRate("p60", "P/60", 2, "Points per 60 minutes"), plRate("g60", "G/60", 2, "Goals per 60 minutes"), plRate("a160", "A1/60", 2, "Primary assists per 60 minutes"),
+      plRate("st60", "SOG/60", 1, "Shots on goal per 60 minutes"),
+      plCol("shp", "S%", p => { const b = plBasic(p); return b?.st ? 100 * b.g / b.st : null; }, plNum(1), { tip: "Goals per shot on goal" }),
+      plCol("ppp", "PP pts", p => plSum2(plLine(p), "ppg", "ppa"), plNum(0), { tip: "Power-play points (goals + assists), from the career table" }),
+      plCol("rat", "Rating", p => plRaw(p, "rat") ?? plLine(p)?.avr ?? null, plNum(2), { tip: "Average game rating" })],
+    sort: ["p60", "p"],
+    boxes: () => [
+      { id: "g", title: "Goal scorers", sub: "Goals", val: p => plBasic(p)?.g ?? null, right: v => `<span class="lnum"><b>${v}</b></span>`, goto: ["offence", "g", -1], ok: p => p.grp !== "G" },
+      rateBox("a1", "Playmakers", "Primary assists per 60", "a160", 2),
+      { id: "ppp", title: "Power-play producers", sub: "PP points", val: p => plSum2(plLine(p), "ppg", "ppa"), right: v => `<span class="lnum"><b>${v}</b></span>`, goto: ["offence", "ppp", -1], ok: p => p.grp !== "G" },
+      rateBox("sog", "Shot volume", "Shots on goal per 60", "st60", 1)],
+  };
+  TABS.defence = {
+    lede: "Ice time, blocks, penalty killing and discipline. Goalies are on their own tab",
+    cols: () => [plRC("pos"), plRC("age"),
+      plTime("toi_gp", "TOI/GP", "Time on ice per game"), plTime("pk_toi", "PK TOI", "Penalty-kill time per game"),
+      plCol("pm60", "+/-/60", p => plRaw(p, "pm60"), plSgn(2), { tip: "Plus-minus per 60 minutes" }),
+      plCol("blk60", "Blk/60", plBlk, plNum(2), { tip: "Blocked shots per 60 minutes, players over the minutes floor", why: "no block counts in these box scores" }),
+      plCol("shpts", "SH pts", p => plSum2(plLine(p), "shg", "sha"), plNum(0), { tip: "Short-handed points, from the career table" }),
+      plRate("pim60", "PIM/60", 2, "Penalty minutes per 60 (fewer is better)", { low: true })],
+    sort: ["toi_gp"],
+    boxes: () => [
+      { id: "blk", title: "Shot blockers", sub: "Blocks per 60", val: plBlk, right: v => `<span class="lnum"><b>${fmt(v, 2)}</b></span>`, href: p => pRankHref("x", "blk60", p.grp, p.k), why: "no block counts in these box scores" },
+      rateBox("pk", "PK workhorses", "Penalty-kill time per game", "pk_toi", 0),
+      { ...rateBox("pim", "Cleanest", "Fewest penalty minutes per 60", "pim60", 2), dir: 1 }],
+  };
+  TABS.goalies = {
+    lede: "Goalies only: games, record, SV% and GAA",
+    cols: () => [plRC("pos"), plRC("age"), ...plGoalieCols()],
+    sort: ["svp", "gp"],
+    boxes: () => [plSvpBox("goalies"), plGaaBox("goalies"),
+      { id: "wl", title: "Workload", sub: "Games played", val: plGGp, right: v => `<span class="lnum"><b>${v}</b></span>`, goto: ["goalies", "gp", -1] }],
+  };
   NOTES.defence = "Hits, takeaways, giveaways and faceoff wins exist only as team totals, so they have no player columns. Blocks come from the box scores.";
   plNameCell = p => `<th scope="row" class="pcol"><a class="pcell" href="${route(p.k)}">${logo(clubOf(p), 26)}<span><b>${esc(p.n)}</b><small>${esc(clubOf(p))}</small></span></a></th>`;
 
-  // ---- team pages
   for (let i = ROSTER_COLS.length - 1; i >= 0; i--) if (["ca", "pa", "peak", "war", "imp", "role"].includes(ROSTER_COLS[i][0])) ROSTER_COLS.splice(i, 1);
   ROSTER_COLS[0][4] = p => `<th scope="row" class="pcol"><a class="pcell" href="${route(p.k)}"><span><b>${esc(p.n)}</b>${p.lg && p.lg !== "NHL" ? `<small>${esc(p.lg)}</small>` : ""}</span></a></th>`;
   const rPos = ROSTER_COLS.findIndex(c => c[0] === "age") + 1;
@@ -79,7 +95,7 @@ if (PURE) {
     ["svp", "SV%", p => (p.grp === "G" ? plSvp(p) : null), true, p => { const v = p.grp === "G" ? plSvp(p) : null; return `<td class="num">${v == null ? dash : v.toFixed(3).replace(/^0/, "")}</td>`; }, 64]);
   RF.sort = "pts";
   for (let i = TP_COLS.length - 1; i >= 0; i--) if (["imp", "off", "def", "fin", "ply", "ixg", "gax", "war"].includes(TP_COLS[i][0]) || TP_COLS[i][5] === "war") TP_COLS.splice(i, 1);
-  // the More view sorts by key "imp" by default (impact is gone): points take that key there
+
   TP_COLS.splice(TP_COLS.findIndex(c => (c[5] || "").includes("adv")), 0, ["imp", "P", r => r.p, v => `<b>${v}</b>`, "Points", "adv"]);
   for (let i = TP_VIEWS.length - 1; i >= 0; i--) if (TP_VIEWS[i][0] === "war") TP_VIEWS.splice(i, 1);
   TP_VIEWS.forEach(v => { if (v[0] === "adv") v[1] = "More"; });
@@ -89,21 +105,18 @@ if (PURE) {
   prospectsTab = club => pureProspectsTab(club);
   teamDraftsTab = club => pureTeamDrafts(club);
 
-  // ---- pages that are models through and through
   renderHome = pureHome;
   renderDraft = pureDraft;
   renderProspects = pureProspects;
   renderAbout = pureAbout;
   renderValue = renderH2H = renderTrade = () => { location.replace("#/"); };
-  const baseFacts = factRows;
-  factRows = (p, X) => baseFacts(p, X).filter(r => !["Est. CA", "Est. PA", "Proj. peak", "Role", "Career role", "Big games"].includes(r[0]));
   keyNumbers = pureKeyNumbers;
   composePlayer = pureComposePlayer;
   exportCard = () => {};
   const baseChart = drawChart;
   drawChart = (p, proj, metric) => {
     if (metric === "ca" || metric == null || metric === "") metric = String(D.attrs.findIndex((a, i) => p.h.some(h => h[i + 2] != null)));
-    if (metric === "-1" || !p.h.some(h => h[+metric + 2] != null)) {   // no attribute recorded for him
+    if (metric === "-1" || !p.h.some(h => h[+metric + 2] != null)) {
       const box = view.querySelector("#chart");
       if (box) box.innerHTML = `<p class="muted small">No attributes recorded for this player.</p>`;
       return;
@@ -114,18 +127,13 @@ if (PURE) {
     const sub = view.querySelector("#chart-sub");
     if (sub) sub.textContent = "Attribute value (1–20) at each snapshot.";
   };
-  gameScoreCard = () => "";   // a weighted formula, not a stat
-  const baseShots = shotPanel;
-  shotPanel = p => baseShots(p).replace(/<button type="button" data-m="eff"[^>]*>[^<]*<\/button>/, "");
-  const baseAttrs = attrTables;
-  attrTables = p => baseAttrs(p).replace(" Default is his scouted preferred role.", "");
+  gameScoreCard = () => "";
   const baseRankRows = playerRankRows;
   playerRankRows = (kind, key, grp) => (["m", "g", "x"].includes(kind) ? baseRankRows(kind, key, grp) : null);
   const baseTeamRank = teamRankRows;
   teamRankRows = key => (key === "pool" ? null : baseTeamRank(key));
 }
 
-/* Counting numbers of the selected season: NHL box-score totals, else the season line from his History tab. */
 function pureBasic(p) {
   const q = inSeason(p);
   const t = q.card?.totals;
@@ -133,7 +141,7 @@ function pureBasic(p) {
   const c = plLine(q);
   return c ? { gp: c.gp, g: c.g, a: c.a, p: c.p, pm: c.pm, pim: c.pim, st: c.s, toi: c.toi != null && c.gp ? c.toi * c.gp : null } : null;
 }
-/* Sum of every visible attribute change between the MOVE_BASE snapshot and the latest one (null when he isn't in both). */
+
 function attrMove(p) {
   const b = p.h.at(-1), a = MOVE_BASE == null ? null : p.h.findLast(h => h[0] <= MOVE_BASE);
   if (!a || b[0] !== D.dates.length - 1) return null;
@@ -150,7 +158,6 @@ function attrChanges(p) {
 }
 const pureSv = v => (v == null ? "–" : v.toFixed(3).replace(/^0/, ""));
 
-// ---------------------------------------------------------------- home
 function pureHome() {
   markNav("home");
   const n = D.dates.length, last = D.dates[n - 1], prev = MOVE_BASE == null ? null : D.dates[MOVE_BASE];
@@ -194,7 +201,6 @@ function pureHome() {
   </div>`;
 }
 
-// ---------------------------------------------------------------- player page
 function pureKeyNumbers(p, X) {
   const b = X.t ? { gp: X.t.gp, g: X.t.g, a: X.t.a, p: X.t.p, pm: X.t.pm, toi: X.t.toi } : pureBasic(p);
   const line = plLine(p);
@@ -231,10 +237,10 @@ function pureComposePlayer(S, p, X) {
   const perf = `${jumps([["stats", "Career stats"], ["shots", "Shots"], ["games", "Game log"]])}
     ${sec("stats", S.career + totals)}${sec("shots", S.shots)}
     ${sec("games", `<div class="panel" id="gamelog"><h2>Game log</h2><p class="muted small">Loading the box scores…</p></div>`)}`;
-  const chart = S.chart.replace(/<option value="ca">[^<]*<\/option>/, "").replace("Ability over time and projection", "Attributes over time");
-  // old links to the Scouting and Comparables sections (gone here) still open this tab
+  const chart = S.chart;
+
   const dev = `${jumps([["attrs", "Attributes"], ["ability", "History chart"]])}${sec("attrs", S.attrs)}${sec("ability", chart)}
-    <div class="psec" id="sec-scout" hidden></div><div class="psec" id="sec-comps" hidden></div>`;
+    ${""}`;
   const record = `${contractPanel(p)}${playerTrades(p)}${sec("awards", awards)}
     <div class="panel"><h2>Player facts</h2>${factList(factRows(p, X))}</div>`;
   return `
@@ -246,7 +252,7 @@ function pureComposePlayer(S, p, X) {
         <h1>${p.no ? `<span class="no">#${esc(p.no)}</span>` : ""}${esc(p.n)}</h1>
         <p>${[esc(p.pos), clubOf(p) ? `<a href="${teamRoute(clubOf(p))}">${esc(clubOf(p))}</a>` : "–", p.lg && p.lg !== "NHL" ? esc(p.lg) : "", `Age ${p.age}`,
               p.sh ? "Shoots " + esc(p.sh[0]) : "", esc(p.ht || ""), esc(p.wt || ""), esc(p.nat || "")].filter(Boolean).join(" · ")}</p>
-        <div class="chips">${X.tagsHtml.replace(/<span class="tag">Big-game[^<]*<\/span>/, "")}</div>
+        <div class="chips">${X.tagsHtml}</div>
       </div>
     </div>
     <div class="ptabs" role="tablist" aria-label="Player sections">${PTABS.map(([k, t]) => `<button type="button" role="tab" data-tab="${k}">${t}</button>`).join("")}</div>
@@ -257,7 +263,6 @@ function pureComposePlayer(S, p, X) {
   </div></div>`;
 }
 
-// ---------------------------------------------------------------- draft: the official lists and past drafts
 const PD = { stage: "", sort: "rank" };
 function pureDraft(tab = "board", year, pick) {
   markNav("draft");
@@ -314,7 +319,6 @@ function pureTeamDrafts(club) {
     || `<p class="muted">No draft records for ${esc(club)}.</p>`;
 }
 
-// ---------------------------------------------------------------- prospects
 const PP = { q: "", own: "", maxAge: "23", limit: 150 };
 function pureProspectRows(list, lead) {
   return list.map(x => { const b = pureBasic(x.p); return `<tr class="link" data-k="${esc(x.p.k)}">${lead ? lead(x) : ""}<th scope="row" class="pcol"><a class="pcell" href="${route(x.p.k)}"><span><b>${esc(x.p.n)}</b></span></a></th>
@@ -377,7 +381,6 @@ function purePicks(club) {
     <p class="sub pad">From ${esc(club)}'s Transactions tab (${fmtDate(D.picks.date)}). "Own" = its own pick; a logo = acquired from that club; traded = it doesn't own one.</p></section>`;
 }
 
-// ---------------------------------------------------------------- about the data
 function pureAbout() {
   markNav("about");
   const audit = D.audit || [];
@@ -394,24 +397,21 @@ function pureAbout() {
       ${audit.map(a => `<tr><td>${esc(a.check)}</td><td class="small">${esc(a.detail)}</td><td class="num">${a.removed ?? ""}</td></tr>`).join("")}</tbody></table></div></div>` : ""}</div>`;
 }
 
-// ---------------------------------------------------------------- sweeper: no column or box that names a model number
-/* Table columns, number boxes and sections whose title is one of these are removed wherever they appear (pages drawn
-   later, tabs, box scores loaded on demand), so a model number can't slip through a page this file didn't rewrite. */
-const PURE_COLS = /^(est\.? ?(ca|pa)|ca|pa|proj\.? peak|peak|peak age|growth left|war|war\/82|nhl war|war at peak|exp\.? war|exp\.? war this season|worth|surplus|surplus over the deal|value|value per season|war per \$1m|slot avg|above slot|beat slot|per pick|impact|nhl impact|off|def|fin|play|offence %|defence %|ixg|ixg\/60|xg|xga|xgf|g ?[−-] ?xg|xg ?[−-] ?ga|gsax|gsax\/100|gsax\/60|top war|finishing|def\. war|gar|ours|our rank|tier|scout tier|role|game score|gs|ca in \d+ yrs?|fut|asks|re-sign %)$/i;
-const PURE_BOX = /\b(WAR|xG|GSAx|est\. ?CA|est\. ?PA|potential|projected|projection|peak|surplus|impact|scout|underrated|game score|re-sign forecast|if he re-signs)\b/i;
-/* Shot-map zone tips: drop the expected-goals line (the tip lives outside #view, so the sweeper never sees it). */
+const PURE_COLS = /^(est\.? ?(ca|pa)|ca|pa|proj\.? peak|peak|peak age|growth left|war|war\/82|nhl war|war at peak|exp\.? war|exp\.? war this season|worth|surplus|surplus over the deal|value|value per season|war per \$1m|slot avg|above slot|beat slot|per pick|impact|nhl impact|off|def|fin|play|offence %|defence %|ixg|ixg\/60|xg|xga|xgf|g ?[−-] ?xg|xg ?[−-] ?ga|gsax|gsax\/100|gsax\/60|top war|finishing|def\. war|gar|ours|our rank|tier|scout tier|role|game score|gs|ca in \d+ yrs?|fut|asks|re-sign %)$/i;     // @pure-guard
+const PURE_BOX = /\b(WAR|xG|GSAx|est\. ?CA|est\. ?PA|potential|projected|projection|peak|surplus|impact|scout|underrated|game score|re-sign forecast|if he re-signs)\b/i;     // @pure-guard
+
 if (PURE) {
   const _showTip = showTip;
   showTip = function (e, html) {
-    return _showTip(e, String(html).replace(/<div class="row[^"]*"><span>[^<]*(Expected goals|xG)[^<]*<\/span>.*?<\/div>/g, ""));
+    return _showTip(e, String(html).replace(/<div class="row[^"]*"><span>[^<]*(Expected goals|xG)[^<]*<\/span>.*?<\/div>/g, ""));     // @pure-guard
   };
 }
 
 function pureSweep(root) {
-  // the Players page subtitle ends with a pointer to the models
+
   root.querySelectorAll("p.lede").forEach(el => {
     const h = el.innerHTML.replace(/ · est\. CA and PA come from visible attributes only \(see <a href="#\/about">How it works<\/a>\)/, "");
-    if (h !== el.innerHTML) el.innerHTML = h;   // only when it changes: every write wakes the observer
+    if (h !== el.innerHTML) el.innerHTML = h;
   });
   root.querySelectorAll("table").forEach(tbl => {
     const head = tbl.tHead?.rows;
@@ -432,7 +432,7 @@ function pureSweep(root) {
 }
 if (PURE) {
   let queued = false;
-  // pages drawn by a click run the sweep at once too (the observer below catches what loads later)
+
   ["renderRankings", "renderTeams", "renderPlayer", "renderPlayoffs", "renderLeague", "renderTrades", "renderExpiring", "renderHof",
    "renderHofRanking", "renderRank", "drawGameLog", "drawCareer"].forEach(n => {
     const base = window[n];
@@ -445,11 +445,10 @@ if (PURE) {
   }).observe(view, { childList: true, subtree: true });
   const navGone = ["value", "h2h", "trade"];
   document.querySelectorAll(".top nav a").forEach(a => {
-    if (navGone.includes(a.dataset.nav) || /underrated|scores/.test(a.getAttribute("href") || "")) a.remove();
+    if (navGone.includes(a.dataset.nav) || /underrated|scores/.test(a.getAttribute("href") || "")) a.remove();     // @pure-guard
   });
 }
 
-// ---------------------------------------------------------------- trades, GMs, Hall of Fame
 if (PURE) {
   for (let i = TRADE_SORTS.length - 1; i >= 0; i--) if (["big", "gap"].includes(TRADE_SORTS[i][0])) TRADE_SORTS.splice(i, 1);
   const pureAssetLine = p => { const c = p.lg === "NHL" ? contractInfo(p) : null; return `${esc(p.pos)} · ${p.age}${c?.cur?.sal ? ` · ${money(c.cur.sal)}` : ""}`; };
@@ -480,7 +479,6 @@ if (PURE) {
       <details class="ttree-box" data-t="${tradesOldest().indexOf(t)}"><summary>Trade tree${more ? ` <span class="chip">${more} went on to another trade</span>` : ""}</summary></details></article>`;
   };
 
-  // GMs: who ran each club and how it went, no composite score
   const gmRows = () => {
     const by = {};
     for (const t of D.gms.tenures) { const s = (by[t.gm] ||= { gm: t.gm, tenures: [], rows: [], days: 0 }); s.tenures.push(t); s.days += gmDays(t); }
@@ -532,12 +530,24 @@ if (PURE) {
     makeSortable();
   };
 
-  // Hall of Fame: honours and real totals instead of WAR
   for (let i = HOF_TITLES.length - 1; i >= 0; i--) if (["war", "swar"].includes(HOF_TITLES[i][0])) HOF_TITLES.splice(i, 1);
   HOF_SCORE[2] = "3 per NHL trophy + 2 per Stanley Cup + 1 per All-Star team + 1 per 100 NHL points (skaters) or 40 wins (goalies)";
   HOF_SCORE[3] = r => 3 * r.trophies.length + 2 * r.cups.length + r.allstar.length + (r.x.grp === "G" ? r.w / 40 : r.pts / 100);
-  const baseHof = hofBody;
-  hofBody = club => baseHof(club)
-    .replace(/Hall of Fame score: WAR [^.]*\./, `Hall of Fame score: ${HOF_SCORE[2]}${club ? " (with the club)" : ""}.`)
-    .replace(/ · [\d.−-]+ WAR/g, "");
+
+}
+
+if (PURE) {
+  expiringClass = offset => {
+    const year = seasonEndNow() + offset;
+    return D.players.filter(p => p.lg === "NHL" && clubOf(p) && dealsOf(p).at(-1)?.e === year)
+      .map(p => ({ p, fa: faStatus(p), sal: contractInfo(p).cur?.sal ?? salaryNum(p.sal), year })).filter(r => r.fa);
+  };
+  expiringTable = (rows, kind) => {
+    if (!rows.length) return `<p class="muted">No ${kind}s found.</p>`;
+    const body = rows.sort((a, b) => (b.sal || 0) - (a.sal || 0)).map(({ p, fa, sal }) => `<tr class="${clubOf(p) === MY_TEAM ? "hl" : ""}">
+      <th scope="row" class="pcol"><a href="${route(p.k)}"><b>${esc(p.n)}</b></a></th><td>${tname(clubOf(p), 18)}</td><td>${esc(p.pos)}</td><td class="num">${p.age}</td>
+      <td class="num on" data-v="${sal || ""}">${sal ? money(sal) : dash}</td><td title="${esc(fa.full)}">${esc(fa.t)}</td></tr>`).join("");
+    return `<div class="tablewrap"><table class="rank sortable"><thead><tr><th class="pcol">Player</th><th>Club</th><th>Pos</th><th class="num">Age</th>
+      <th class="num on" title="Cap hit of the deal in force">Cap hit</th><th>Status</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  };
 }

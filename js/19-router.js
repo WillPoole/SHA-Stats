@@ -1,13 +1,12 @@
 "use strict";
 
-// ---------------------------------------------------------------- router
-let keepScroll = false;   // set for a re-render that shouldn't jump to the top (theme toggle)
+let keepScroll = false;
 function render() {
   const raw = location.hash.slice(1), h = decodePart(raw);
   tip.hidden = true;
   if (raw.startsWith("/p/")) {
     markNav("players");
-    // #/p/<encoded key>[/<tab>]: the key is URI-encoded, so a raw "/" only separates the tab
+
     const [k, tab] = raw.slice(3).split("/");
     renderPlayer(decodePart(k), tab || "overview");
     return;
@@ -31,6 +30,7 @@ function render() {
   else if (h === "/hof" || raw.startsWith("/hof/")) { nhlPeople(); renderHof(raw.slice(5)); }
   else if (h === "/playoffs" || raw.startsWith("/playoffs/")) renderPlayoffs(raw.slice(10));
   else if (h === "/expiring" || raw.startsWith("/expiring/")) { const [o, pos] = raw.slice(10).split("/"); renderExpiring(o, pos); }
+  else if ((h === "/freeagents" || raw.startsWith("/freeagents/")) && typeof renderFreeAgents === "function") renderFreeAgents(raw.slice(12));
   else if (h === "/gms" || raw.startsWith("/gms/")) renderGms(raw.slice(5));
   else if (raw.startsWith("/gm/")) renderGm(decodePart(raw.slice(4)));
   else if (h === "/h2h") renderH2H();
@@ -48,7 +48,7 @@ if (!NO_DATA) {
   (D.teamHist?.alumni || []).forEach(a => { if (!byKey.has(a.k)) ALUMNI.set(a.k, a); });
   if (!document.title.startsWith(D.title)) document.title += " · " + D.title;
   const snap = document.getElementById("foot-snap");
-  // the League menu lists every league with its own pages
+
   document.getElementById("navmenu-league")?.insertAdjacentHTML("beforeend", leagueNames().map(l => `<a href="${leagueRoute(l)}">${esc(l)}</a>`).join(""));
   if (snap) snap.textContent = `· ${D.title} · ${D.players.length.toLocaleString()} players · snapshot ${fmtDate(D.dates.at(-1))}`;
   if (!D.gms) document.querySelectorAll('.top nav a[data-nav="gms"]').forEach(a => a.remove());
