@@ -128,7 +128,7 @@ function renderTeams(club, tab = "roster", arg, arg2) {
   if (tab === "roster") bindRoster(club, ps);
   else if (tab === "players") bindTeamPlayers(club, arg, arg2);
   else if (tab === "results") view.querySelector("#rs-season")?.addEventListener("change", e => (location.hash = `${teamRoute(club)}/results/${e.target.value}`));
-  if (["prospects", "drafts"].includes(tab) || (tab === "contracts" && arg === "value")) makeSortable();
+  if (["prospects", "drafts"].includes(tab) || tab === "contracts") makeSortable();
   if (tab === "trades") wireTeamTrades(club);
   if (!["roster", "players", "results"].includes(tab)) view.querySelectorAll("tr.link").forEach(tr => tr.onclick = e => { if (!e.target.closest("a")) playerRow(tr); });
 }
@@ -307,10 +307,27 @@ function capTable(club, ps) {
     ${D.picks ? `<aside class="captop-picks">${capPicks(club)}</aside>` : ""}</div>
     ${capGroup("Forwards", grp(roster, "F"), now, cap, "cap-f")}${capGroup("Defence", grp(roster, "D"), now, cap, "cap-d")}${capGroup("Goaltenders", grp(roster, "G"), now, cap, "cap-g")}
     ${capGroup("Non-roster forwards", grp(rest, "F"), now, null, "cap-nf")}${capGroup("Non-roster defence", grp(rest, "D"), now, null, "cap-nd")}${capGroup("Non-roster goaltenders", grp(rest, "G"), now, null, "cap-ng")}
+    ${capResign(club, signed)}
     <p class="small muted"><b>How EHM counts the cap</b> (decoded from the game): the season has 30 weekly cap periods from October. Each week played locks in that week's payroll; the weeks left count at today's payroll. The cap is held against the average of the 30 (Averaged Club Salary), so a player added in March only counts for the weeks left, and one traded away still counts for the weeks he was here. A player on injured reserve counts $0 while he's out${ir.length ? ` (here: ${ir.map(p => esc(p.n)).join(", ")})` : ""}. Pro-rated room is the game's own measure of the yearly pay a club can still add this season and stay under the cap.
       ${game ? "" : "The game shows the real averaged figure only to the club's own GM, so here it's estimated from the roster in each week (latest snapshot, moved by dated trades). Not visible to a client, so not counted: minor-league players on NHL contracts, buyouts and retained salary; against a recorded Carolina figure the estimate was 1.5% low."}</p>
     <p class="small muted"><span class="capkey capext">Tinted</span> = an extension's seasons. "Signed" = the extension is signed but its pay isn't known yet${est ? `. * = RFA or UFA estimated from his age at expiry` : ""}.
       ${anyGame ? "From each player's Contract tab where it has been read, otherwise" : "Worked out"} from his profile in each snapshot.</p>`;
+}
+/* The club's deals ending this season or next: what each player will ask and his chance of re-signing (p.rs). */
+function capResign(club, ps) {
+  // the club's own players plus its minor-leaguers on NHL deals (rs.org = this club)
+  const own = new Set(ps.map(p => p.k)), minors = D.players.filter(p => !own.has(p.k) && rsOf(p)?.org === club);
+  const now = seasonEndNow(), rows = [...ps, ...minors].filter(p => rsOf(p)).map(p => ({ p, rs: rsOf(p) })).sort((a, b) => !!a.rs.org - !!b.rs.org || a.rs.e - b.rs.e || b.rs.ask - a.rs.ask);
+  if (!rows.length) return "";
+  const total = e => rows.filter(r => r.rs.e === e).reduce((t, r) => t + r.rs.ask, 0);
+  const body = rows.map(({ p, rs }) => `<tr><th scope="row" class="pcol"><a href="${route(p.k)}/record">${esc(p.n)}</a>${rs.org ? ` <span class="small muted" title="Playing for ${esc(clubOf(p) || "")} in the minors">${esc(p.lg)}</span>` : ""}</th><td>${esc(p.pos)}</td><td class="num">${p.age}</td>
+      <td>${seasonName(rs.e)}</td><td>${esc(rs.fa)}</td><td class="num" data-v="${rs.cur ?? ""}">${rs.cur ? rsM(rs.cur) : dash}</td>
+      <td class="num" data-v="${rs.ask}" title="${esc(rsAskTip(rs))}"><b>${rsM(rs.ask)}</b></td><td class="num" data-v="${rs.cold ?? ""}">${rs.cold > rs.ask ? rsM(rs.cold) : dash}</td><td class="num" data-v="${rs.stay}">${rsPct(rs)}</td>
+      <td title="${esc(rsWhy(rs))}">${rsTalk(rs)}</td></tr>`).join("");
+  return `<section class="card-box flush" aria-label="Re-sign forecast"><h2 class="box-h">Re-sign forecast <span class="muted">${rows.length}</span></h2>
+    <div class="tablewrap"><table class="rank sortable"><thead><tr><th class="pcol">Player</th><th>Pos</th><th class="num">Age</th><th>Deal ends</th><th>Then</th>
+      <th class="num">Cap hit now</th><th class="num on" title="What he will ask the club for as a core player (forecast)">Asks</th><th class="num" title="The most he asks before refusing to talk, if his interest in the club is low (hidden from clients)">Up to</th><th class="num" title="Chance he re-signs (forecast)">Re-sign %</th><th title="EHM's own test: will he talk to his club before free agency">Talks</th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="small muted">${minors.length ? `Includes ${minors.length} player${minors.length > 1 ? "s" : ""} on NHL deals playing in the minors (marked AHL). ` : ""}Re-signing everyone ending ${seasonName(now)} would cost ${rsM(total(now))}${total(now + 1) ? `, everyone ending ${seasonName(now + 1)} ${rsM(total(now + 1))}` : ""} a season at their asks. ${rsNote()}</p></section>`;
 }
 function contractsTab(club, ps, view2) {
   const value = view2 === "value";

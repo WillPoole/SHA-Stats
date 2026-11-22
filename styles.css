@@ -606,6 +606,9 @@ dl.facts dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: any
 .legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px;
                        background: var(--c); vertical-align: middle; margin-right: 6px; }
 .legend span.band::before { height: 10px; opacity: .6; }
+.legend span.roll::before { width: 0; height: 12px; border-radius: 0; background: none; border-left: 1px solid var(--c); vertical-align: -1px; }
+.legend span.roll.est::before { border-left-style: dashed; }
+.legend span.band.summer::before { opacity: .25; }
 .legend .dot::before { width: 10px; height: 10px; border-radius: 50%; }
 svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
 svg.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
@@ -948,6 +951,13 @@ tr.dexp td { background: var(--surface-2); padding: 8px 14px; }
 .dealcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; margin: 10px 0 16px; }
 .dealcard { border: 1px solid var(--grid); border-radius: 8px; padding: 14px; background: var(--surface); }
 .dealcard.ext { border-color: var(--s1); background: color-mix(in srgb, var(--s1) 7%, var(--surface)); }
+.dealcard.fc { border-style: dashed; border-color: var(--s2); background: color-mix(in srgb, var(--s2) 6%, var(--surface)); }
+.dealcard.fc h3 .chip { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.negp { margin: 0 0 16px; }
+.negp h3 .chip { text-transform: none; letter-spacing: 0; font-weight: 600; }
+table.neg tr.neghead th { text-align: left; padding-top: 10px; font-weight: 500; }
+table.neg td.want { background: color-mix(in srgb, var(--s2) 14%, transparent); }
+.dealcard.fc > p { margin: 10px 0 0; }
 .dealcard h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
 .dealhit { display: block; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .dealcard dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 12px; margin: 12px 0 0; }

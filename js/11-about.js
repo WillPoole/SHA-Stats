@@ -115,6 +115,53 @@ function extraInputsSection() {
   points projection, and the midpoint of every hidden-value range at least 30 reports mention).</p>`;
 }
 
+/* Re-sign forecast (D.rsInfo from ehm/model/resign.py): how the ask is worked out and how good the chance of staying is. */
+function resignSection() {
+  const I = D.rsInfo;
+  if (!I) return "";
+  const S = I.scores, used = I.used, A = I.ask || {};
+  const names = { base: "Same chance for everyone", rule: "EHM's talk test alone", full: "Logistic, every input", gbm: "Boosted trees, every input", visible: "Boosted trees, client-visible inputs only" };
+  const rows = Object.entries(S).map(([k, s]) => `<tr class="${k === used ? "hl" : ""}"><td>${names[k] || k}${k === used ? " <b>(used)</b>" : ""}</td><td class="num">${s.logloss}</td><td class="num">${s.brier}</td><td class="num">${s.auc ?? dash}</td></tr>`).join("");
+  const cal = (I.calib || []).map(c => `<tr><td>${Math.round(c.lo * 100)}–${Math.round(c.hi * 100)}%</td><td class="num">${c.n}</td><td class="num">${Math.round(c.pred * 100)}%</td><td class="num">${Math.round(c.real * 100)}%</td></tr>`).join("");
+  return `<h3>Re-sign forecast</h3>
+  <p>For players on NHL deals whose deal ends this season or next, including those playing in the AHL (their NHL club is the AHL club's
+  parent, found from the training save's call-ups; an NHL deal pays $500k+, an AHL-only one about $50k): what he will ask his own club for, and the chance he re-signs.
+  The ask follows EHM's own contract code, decoded from the game: a wage index from ability and reputation, the NHL wage curve,
+  the re-signing adjustments (loyalty, RFA rules, the soft cap) and the cap on how big a raise he asks for. It needs values a
+  client never sees (true ability, reputation, Loyalty, Ambition, Pressure, Professionalism)${I.est ? `; this league borrows them
+  from the training save (the same database), with reputation moved by the gap between this league's estimated CA and the training CA,
+  so the asks here are rougher than on the training site` : ", read from the hosted save"}. The range is ±1 standard deviation of that reputation estimate.
+  <b>The ask depends on the squad status offered</b>, so the site shows it as a core player (the headline), a depth player and a key player.
+  <b>It also depends on his interest in the club</b>, which no client can see: the game multiplies the ask by 3.15 ÷ his interest, up to 2× for ages 21-31,
+  and a player below 1.75 refuses to talk. The headline assumes the typical interest (no change); "up to" is the ask at 1.75.
+  Tested on ${(A.n || 0).toLocaleString()} re-signings with AI clubs in the training save: they land at the <i>depth</i> ask (typical error
+  ${Math.round((A.depMedAbsErr || 0) * 1000) / 10}%, ${Math.round((A.depWithin10 || 0) * 100)}% within 10%); the core ask is ${Math.round((A.coreMedErr || 0) * 100)}% higher
+  than what AI clubs paid. Of SHA's ${A.shaN || 0} extensions signed by GMs, ${A.shaDepthLike || 0} sit at the depth ask, the rest near the core or key ask or
+  above it (a player keen to leave).</p>
+  <p><b>Negotiation table</b> (player Contract tab). This part is decoded from the game too. <b>The term he asks for</b> starts from his age
+  (NHL: 3 years at 19-24, 2.5 at 25-27, 2.75-3.25 at 28-31 by position, 2.5 at 32-35, 1 from 36). It is longer when his reputation is below
+  the club's (× club ÷ his) and longer for a Key player (×1.25), shorter for Depth (×0.75). A Key or Core player of 22-33 adds 1 to 4.5 years
+  for a $2M-6M+ ask, and cheap deals stay short (an ask up to $1.25M = 1 season, $1.75M = 2, $3M = 4). At most 8 seasons with his own club.
+  At 26-35 a hidden per-player number adds 0-1 year, so the term can show as a range. <b>What he accepts:</b> he compares each offer's value
+  with the deal he asked for. Value = pay times a term factor (the signing fee he wants is about 1% of a season, so it barely counts):
+  any term other than his costs value, and a longer one costs more while he's young (forwards peak at 31, defence 33, goalies 32). A player
+  option makes a shorter deal acceptable. He signs at 85% of his value if he's keen on the club (interest above 3.15, usual at his own club
+  in the last weeks of his deal), else at 95%. High Professionalism and Loyalty with low Ambition push that up to about 105%; the reverse
+  pulls it down to 86%. AI clubs in the training save often sign a term other than the one asked for (their offer logic isn't decoded),
+  so the term is what he asks a human GM for, not a prediction of what an AI club will sign.</p>
+  <p>The chance he stays is fitted on ${I.n.toLocaleString()} training-save NHL deals that ran out (${I.trainPlayers.toLocaleString()} players;
+  ${Math.round(I.base * 100)}% stayed with the same organisation, NHL club or its AHL affiliate, two weeks after the deal ended), with inputs from 20-120 days before:
+  EHM's own "will he talk" test at ${I.talkDays} days out, age at expiry, RFA/UFA, pay now, his ask against it, rank by ability against his
+  club's NHL roster, whether he's in the minors, Loyalty and Ambition. Scored on players it never saw (5 player folds):</p>
+  <div class="tablewrap"><table><thead><tr><th>Model</th><th class="num">Log loss</th><th class="num">Brier</th><th class="num">AUC</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="small muted">Lower log loss and Brier are better; AUC 0.5 = a coin flip, 1 = perfect. ${S.visible ? `With only what a client sees (age at expiry, RFA/UFA, pay, rank in the club by ability) the log loss is ${S.visible.logloss}
+  against ${S[used].logloss} with every input: age, pay and rank carry most of it, and the hidden values and EHM's talk test add little once those are known.` : ""} Players who left for good (retired, unsigned)
+  count as gone. Training clubs are run by the AI, so a human GM's own decisions aren't in it.</p>
+  ${I.byLevel ? `<div class="tablewrap"><table><thead><tr><th>Players</th><th class="num">Deals</th><th class="num">Stayed</th><th class="num">Log loss</th><th class="num">AUC</th></tr></thead><tbody>
+    ${Object.entries(I.byLevel).map(([k, b]) => `<tr><td>${esc(k)}</td><td class="num">${b.n.toLocaleString()}</td><td class="num">${Math.round(b.stayed * 100)}%</td><td class="num">${b.logloss}</td><td class="num">${b.auc}</td></tr>`).join("")}</tbody></table></div>
+  <p class="small muted">Minor-leaguers are harder to call: about half stay, and it turns more on what the club decides.</p>` : ""}
+  <div class="tablewrap"><table><thead><tr><th>Forecast</th><th class="num">Deals</th><th class="num">Average forecast</th><th class="num">Really stayed</th></tr></thead><tbody>${cal}</tbody></table></div>`;
+}
 function predictorsSection() {
   const P = D.predict || {}, h = P.h2h, pk = P.picks, cw = P.carWar;
   const pc = v => v == null ? "–" : (100 * v).toFixed(1) + "%";
@@ -222,6 +269,13 @@ function renderAbout(section) {
   The 80% band is that model's 10th–90th percentile (it covered 76–78% of real outcomes at every age, where the old band
   covered about half at 0-6 months); past it, the PA range above plus the month-to-month noise of real growth.` :
   "The 80% band uses the PA range above plus the month-to-month noise of real growth."}</p>
+  <p><b>Growth days.</b> EHM's code changes a player's CA on only three days a year, 120 days apart, set by his database id
+  (decoded from the game). Between two snapshots CA changed for 65% of players when one of those days fell in between,
+  and for 9% when none did (mostly a separate −1 drop). July and August are the exception: players aged 23 or under also
+  grow then. So the projection chart holds the line flat between growth days and moves it on them (a ramp through the
+  summer window). The totals are the same as the smooth projection; only the timing differs. On the training save the days
+  are exact. Elsewhere they are estimated from the snapshots in which his visible attributes moved (dashed lines; about
+  half of the players are placed within 10 days, more with longer histories).</p>
   <p class="small muted">Caveat: the snapshots so far run from ${fmtDate(D.dates[0])} to ${fmtDate(D.dates.at(-1))}.
   Months not covered yet (especially the off-season) aren't in the fit, and long-range projections can't be checked against reality
   until the save has been simmed that far. The curve will sharpen as more snapshots arrive; just rebuild.</p>
@@ -293,6 +347,7 @@ function renderAbout(section) {
   ${rolesSection()}
 
   ${predictorsSection()}
+  ${resignSection()}
 
   <h3>Updating</h3>
   ${D.siteKey ? `<p>Take SHA Snapshot.bat crawls the league and builds this site; to rebuild without crawling, run <code>Build SHA Website.bat</code>

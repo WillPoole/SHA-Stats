@@ -328,9 +328,28 @@ function contractSummary(p) {
   const club = clubOf(p), link = cv && NHL_TEAMS[club] ? ` <a href="${teamRoute(club)}/contracts">Team contracts →</a>` : "";
   return `<p class="cterm"><b>${cur?.sal ? capFull(cur.sal) : esc(p.sal || "Pay unknown")}</b>${cur ? ` through ${esc(contractEnds(live))}` : ""} · ${left}</p>
     ${next ? `<p class="cterm small">Extension signed: ${next.sal ? `<b>${capFull(next.sal)}</b>` : "value known July 1"}, ${seasonName(next.s)} to ${seasonName(next.e)}</p>` : ""}
+    ${!next && live.rs ? `<p class="cterm small">Forecast if he re-signs: asks <b>${rsM(live.rs.ask)}</b>, <b>${rsPct(live.rs)}</b> chance he stays</p>` : ""}
     ${cv ? `<p class="small muted">Expected value ${signed(cv.perSeason)} a season against the market.${link}</p>` : ""}`;
 }
 const capFull = v => "$" + Math.round(v).toLocaleString("en-US");
+/* Negotiation (ehm/model/negotiation.py, decoded doc 19 §19.3, §19.4.7): per squad status, the ask, the term he asks
+   for and the lowest first-season pay he signs at for each term. "keen" = his interest in the club is above 3.15
+   (usual at his own club near expiry), else he needs 95 % of his value. */
+function negTable(neg) {
+  const sts = ["Key", "Core", "Depth"].filter(s => neg[s]);
+  if (!sts.length) return "";
+  const m = v => v == null ? dash : "$" + (v / 1e6).toFixed(2) + "M";
+  const yrs = y => y[0] === y[1] ? `${y[0]}` : `${y[0]}–${y[1]}`;
+  const terms = [1, 2, 3, 4, 5, 6, 7, 8];
+  const row = (s, k, lab) => `<tr><th scope="row">${lab}</th>${terms.map(n => { const v = neg[s][k][n - 1], want = n >= neg[s].y[0] && n <= neg[s].y[1];
+    return `<td class="num${want ? " want" : ""}">${want ? "<b>" + m(v) + "</b>" : m(v)}</td>`; }).join("")}</tr>`;
+  return `<div class="negp"><h3>Negotiation <span class="chip">forecast</span></h3>
+    <p class="small muted">The status you offer sets his ask and the term he wants. The table shows the lowest first-season pay he'd sign for at each term. Bold = the term he asks for; any other term is worth less to him, so it costs more.</p>
+    <div class="tablewrap"><table class="rank neg"><thead><tr><th>Offer</th>${terms.map(n => `<th class="num">${n} yr${n > 1 ? "s" : ""}</th>`).join("")}</tr></thead><tbody>
+    ${sts.map(s => `<tr class="neghead"><th scope="row" colspan="${terms.length + 1}">As a ${s.toLowerCase()} player: asks <b>${capFull(neg[s].a)}</b> for <b>${yrs(neg[s].y)}</b> season${neg[s].y[1] > 1 ? "s" : ""}</th></tr>
+      ${row(s, "m", "He's keen on the club")}${row(s, "m95", "He isn't")}${neg[s].po.some(v => v != null) ? row(s, "po", "Shorter, with player option") : ""}`).join("")}
+    </tbody></table></div></div>`;
+}
 /* PuckPedia's contract page: this deal, the next one, cap hit by season, the season grid, then the details and history. */
 function contractPanel(p) {
   const live = byKey.get(p.k) || p, ct = live.ct || {}, { now, deals, cur, next, past } = contractInfo(live);
@@ -344,6 +363,12 @@ function contractPanel(p) {
   const nextCard = next ? `<div class="dealcard ext"><h3>Extension signed</h3><b class="dealhit">${next.sal ? capFull(next.sal) : "Known July 1"}</b><span class="small muted">${next.sal ? "Cap hit" : "The game shows the new pay when it starts"}</span>
       <dl>${fact("Term", `${next.e - next.s + 1} season${next.e > next.s ? "s" : ""}`)}${fact("Starts", seasonName(next.s))}${fact("Ends", seasonName(next.e))}
         ${next.signed ? fact(next.src === "game" ? "Signed" : "First seen", fmtDate(next.signed)) : ""}${next.sal ? fact("Total", capFull(next.sal * (next.e - next.s + 1))) : ""}${fact("Then", fa ? `<span title="${esc(fa.full)}">${fa.t}</span>` : "")}${ct.sb ? fact("Signing bonus", capFull(ct.sb)) : ""}</dl></div>` : "";
+  const rs = !next && live.rs ? live.rs : null, today = D.dates.at(-1);
+  const rsCard = rs ? `<div class="dealcard fc"><h3>If he re-signs <span class="chip">forecast</span></h3><b class="dealhit">${capFull(rs.ask)}</b><span class="small muted">Asking cap hit as a core player${rsAskRange(rs) ? `, likely ${rsAskRange(rs)}` : ""}${rs.cold > rs.ask ? `; up to ${rsM(rs.cold)} if he isn't keen on the club` : ""}</span>
+      <dl>${fact("Chance he re-signs", `<b>${rsPct(rs)}</b>`)}${fact("Talks", `${rsTalk(rs)}${rsWhy(rs) ? ` <span class="small muted">(${esc(rsWhy(rs))})</span>` : ""}`)}
+        ${fact("Talks can start", rs.opens > today ? fmtDate(rs.opens) : "Now")}${rs.dep != null && rs.dep !== rs.ask ? fact("As a depth player", capFull(rs.dep)) : ""}${rs.key !== rs.ask ? fact("As a key player", capFull(rs.key)) : ""}
+        ${rs.cur ? fact("Change", rs.ask === rs.cur ? "Same as now" : `${rs.ask > rs.cur ? "+" : "−"}${capFull(Math.abs(rs.ask - rs.cur))} (${rs.ask > rs.cur ? "+" : ""}${((rs.ask / rs.cur - 1) * 100).toFixed(0)}%)`) : ""}${fact("Free agency", rs.fa)}</dl>
+      <p class="small muted">${rsNote()}</p></div>` : "";
   // cap hit by season: everything the save has seen
   const bars = [];
   for (const d of deals) for (let e = d.s ?? (d === cur ? now : d.e); e <= (d.e ?? now); e++) bars.push({ e, sal: d.sal, d });
@@ -367,7 +392,7 @@ function contractPanel(p) {
         <td class="num">${d.sal ? capFull(d.sal) : `<span class="muted">Not known yet</span>`}</td><td class="num">${d.sal && n ? capFull(d.sal * n) : dash}</td><td>${d.signed ? fmtDate(d.signed) : dash}</td></tr>`; }).join("")}</tbody></table></div>` : "";
   const source = ct.read ? `From the game's Contract tab, read ${fmtDate(ct.read)}.` : `Worked out from his profile in each snapshot: a new deal's pay shows on July 1, and a deal signed before the first snapshot only shows when his pay jumps.`;
   const link = NHL_TEAMS[clubOf(p)] ? ` <a href="${teamRoute(clubOf(p))}/contracts">Team contracts →</a>` : "";
-  return `<div class="panel contractp"><h2>Contract</h2><div class="dealcards">${curCard}${nextCard}</div>${chart}${grid}${details}${hist}
+  return `<div class="panel contractp"><h2>Contract</h2><div class="dealcards">${curCard}${nextCard}${rsCard}</div>${rs?.neg ? negTable(rs.neg) : ""}${chart}${grid}${details}${hist}
     <p class="small muted">${source}${fa?.t.endsWith("*") ? " * = estimated from his age at expiry." : ""}${link}</p></div>`;
 }
 function composePlayer(S, p, X) {

@@ -99,3 +99,63 @@ function lastMove4(p) {
   if (!a || b[0] !== D.dates.length - 1) return null;
   return b[1] - a[1];
 }
+
+/* Growth rolls (ehm/model/rolls.py): EHM changes a player's CA only on three days a year, 120 days apart (day of year
+   p.rp, +120, +240; exact from the training host, else estimated from when his attributes moved, p.rc = confidence),
+   plus a July-August window in which players aged 23 or under also grow. rollDates lists his rolls in (from, to]. */
+const ROLL_OFFSETS = [0, 120, 240], SUMMER_MAX_AGE = 23;
+function rollDates(p, from, to) {
+  if (p.rp == null) return [];
+  const out = [];
+  for (let y = from.getFullYear(); y <= to.getFullYear(); y++)
+    for (const off of ROLL_OFFSETS) {
+      const d = new Date(y, 0, 1 + (p.rp + off) % 365);
+      if (d.getFullYear() === y && d > from && d <= to) out.push(d);
+    }
+  return out.sort((a, b) => a - b);
+}
+/* Summer growth windows [Jul 1, Aug 31] inside the projection while he is still young enough. */
+function summerWindows(p, from, to) {
+  const out = [];
+  for (let y = from.getFullYear(); y <= to.getFullYear(); y++) {
+    const a = new Date(y, 6, 1), b = new Date(y, 7, 31);
+    if (b <= from || a >= to || ageAt(p, a.toISOString().slice(0, 10)) > SUMMER_MAX_AGE + 1) continue;
+    out.push([a < from ? from : a, b > to ? to : b]);
+  }
+  return out;
+}
+/* The projection as EHM would move it: flat between growth days, then the growth the smooth path expected since the
+   last one, all at once on the roll day (a ramp through the summer window). Same totals as project(); only the timing
+   differs. Returns {pts: [{date, mid, lo, hi}] (path corners), at(date) -> values, rolls, summers}, or null without
+   a known roll phase. */
+function stepProjection(p, proj) {
+  if (p.rp == null || proj.length < 2) return null;
+  const t0 = proj[0].date, t1 = proj.at(-1).date;
+  const smooth = d => {      // the monthly projection, linear between months
+    let i = proj.findIndex(q => q.date >= d);
+    if (i <= 0) return i === 0 ? proj[0] : proj.at(-1);
+    const a = proj[i - 1], b = proj[i], f = (d - a.date) / (b.date - a.date);
+    return { mid: a.mid + (b.mid - a.mid) * f, lo: a.lo + (b.lo - a.lo) * f, hi: a.hi + (b.hi - a.hi) * f };
+  };
+  const rolls = rollDates(p, t0, t1), summers = summerWindows(p, t0, t1);
+  const inSummer = d => summers.some(([a, b]) => d >= a && d <= b);
+  const ev = [...rolls.filter(d => !inSummer(d)).map(d => [d, d]), ...summers].sort((a, b) => a[0] - b[0]);
+  const pt = (date, v) => ({ date, mid: v.mid, lo: v.lo, hi: v.hi });
+  let v = { mid: proj[0].mid, lo: proj[0].lo, hi: proj[0].hi };
+  const pts = [pt(t0, v)];
+  for (const [a, b] of ev) { pts.push(pt(a, v)); v = smooth(b); pts.push(pt(b, v)); }
+  pts.push(pt(t1, v));
+  const at = d => {          // value on a date: the corner path, the later value on a roll day
+    let r = pts[0];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (d < a.date) break;
+      if (d >= b.date) { r = b; continue; }
+      const f = b.date > a.date ? (d - a.date) / (b.date - a.date) : 1;
+      r = { mid: a.mid + (b.mid - a.mid) * f, lo: a.lo + (b.lo - a.lo) * f, hi: a.hi + (b.hi - a.hi) * f };
+      break;
+    }
+    return r;
+  };
+  return { pts, at, rolls, summers };
+}

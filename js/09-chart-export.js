@@ -21,13 +21,17 @@ function drawChart(p, proj, metric) {
   const hist = p.h.filter(h => h[idx] != null).map(h => ({ date: new Date(D.dates[h[0]] + "T00:00:00"), v: h[idx] }));
   const name = isCA ? "Est. CA" : D.attrs[+metric].split(": ")[1];
   const s1 = css("--s1"), s2 = css("--s2");
+  const sp = isCA ? stepProjection(p, proj) : null;   // growth-roll timing (02-projection.js), null without a phase
+  const est = sp && p.rc < 1;
+  const sv = q => sp ? { ...q, ...sp.at(q.date) } : q;  // a projected month's values as the chart draws them
 
   view.querySelector("#chart-title").textContent = isCA ? "Ability over time and projection" : `${name} over time`;
   view.querySelector("#chart-sub").textContent = isCA
     ? `Estimated CA at each snapshot, then a ${D.projectionMonths}-month projection towards estimated PA (${fmt(p.pa, 0)}). Shaded band = 80% range.`
+      + (sp ? ` EHM moves CA only on his growth days (three a year${sp.summers.length ? ", plus a July–August window while he is 23 or under" : ""}), so the projection steps on them${est ? "; his days are estimated from when his attributes changed" : ""}.` : "")
     : "Attribute value (1–20) at each snapshot. Projections are only made for overall ability.";
   view.querySelector("#legend").innerHTML = isCA
-    ? `<span style="--c:${s1}">Est. CA (snapshots)</span><span style="--c:${s2}">Projection</span><span class="band" style="--c:${s2}">80% range</span>`
+    ? `<span style="--c:${s1}">Est. CA (snapshots)</span><span style="--c:${s2}">Projection</span><span class="band" style="--c:${s2}">80% range</span>${sp ? `<span class="roll${est ? " est" : ""}" style="--c:${s2}">Growth day${est ? " (est.)" : ""}</span>${sp.summers.length ? `<span class="band summer" style="--c:${s2}">Summer growth</span>` : ""}` : ""}`
     : "";
 
   // drawn at the box's real width (1 unit = 1 px), so the labels keep their size on a phone instead of shrinking
@@ -63,10 +67,17 @@ function drawChart(p, proj, metric) {
   g += `<line x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}" stroke="${css("--axis")}"/>`;
 
   if (isCA) {
-    const band = proj.map(q => `${X(q.date)},${Y(q.hi)}`).join(" ") + " " + proj.slice().reverse().map(q => `${X(q.date)},${Y(q.lo)}`).join(" ");
+    const line = sp ? sp.pts : proj;
+    if (sp) {
+      for (const [a, b] of sp.summers)
+        g += `<rect x="${X(a)}" y="${m.t}" width="${Math.max(1, X(b) - X(a))}" height="${H - m.t - m.b}" fill="${s2}" opacity="0.07"/>`;
+      for (const d of sp.rolls)
+        g += `<line x1="${X(d)}" x2="${X(d)}" y1="${m.t}" y2="${H - m.b}" stroke="${s2}" stroke-width="1" opacity="0.45"${est ? ` stroke-dasharray="3 3"` : ""}/>`;
+    }
+    const band = line.map(q => `${X(q.date)},${Y(q.hi)}`).join(" ") + " " + line.slice().reverse().map(q => `${X(q.date)},${Y(q.lo)}`).join(" ");
     g += `<polygon points="${band}" fill="${s2}" opacity="0.12"/>`;
-    g += `<polyline points="${proj.map(q => `${X(q.date)},${Y(q.mid)}`).join(" ")}" fill="none" stroke="${s2}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    const end = proj.at(-1);
+    g += `<polyline points="${line.map(q => `${X(q.date)},${Y(q.mid)}`).join(" ")}" fill="none" stroke="${s2}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const end = sv(proj.at(-1));
     g += `<circle cx="${X(end.date)}" cy="${Y(end.mid)}" r="4" fill="${s2}" stroke="${css("--surface")}" stroke-width="2"/>
           <text class="lbl" x="${X(end.date) + 8}" y="${Y(end.mid) + 4}">${end.mid.toFixed(0)}</text>`;
   }
@@ -81,8 +92,10 @@ function drawChart(p, proj, metric) {
 
   // hover: nearest snapshot or projection month
   const pts = hist.map(h => ({ date: h.date, html: `<div class="row"><span>${esc(name)}</span><b>${isCA ? h.v.toFixed(1) : h.v}</b></div>` }));
-  if (isCA) proj.slice(1).forEach(q => pts.push({ date: q.date, q,
+  if (isCA) proj.slice(1).map(sv).forEach(q => pts.push({ date: q.date, q,
     html: `<div class="row"><span>Projected</span><b>${q.mid.toFixed(0)}</b></div><div class="row muted"><span>80% range</span><span>${q.lo.toFixed(0)}–${q.hi.toFixed(0)}</span></div><div class="row muted"><span>Age</span><span>${q.age.toFixed(1)}</span></div>` }));
+  if (sp) sp.rolls.forEach(d => { const v = sp.at(d); pts.push({ date: d,
+    html: `<div class="row"><span>Growth day${est ? " (est.)" : ""}</span><b>${v.mid.toFixed(0)}</b></div><div class="row muted"><span>80% range</span><span>${v.lo.toFixed(0)}–${v.hi.toFixed(0)}</span></div>` }); });
   const svg = box.querySelector("svg"), xh = svg.querySelector("#xh");
   svg.querySelector("#hit").addEventListener("mousemove", e => {
     const r = svg.getBoundingClientRect();
@@ -104,7 +117,7 @@ function drawChart(p, proj, metric) {
   });
 
   const rows = hist.map(h => `<tr><td>${fmtDate(h.date)}</td><td>Snapshot</td><td class="num">${isCA ? h.v.toFixed(1) : h.v}</td><td></td></tr>`);
-  if (isCA) proj.filter(q => q.m % 3 === 0 && q.m > 0).forEach(q =>
+  if (isCA) proj.filter(q => q.m % 3 === 0 && q.m > 0).map(sv).forEach(q =>
     rows.push(`<tr><td>${fmtDate(q.date)}</td><td>Projection (age ${q.age.toFixed(1)})</td><td class="num">${q.mid.toFixed(1)}</td><td class="num muted">${q.lo.toFixed(0)}–${q.hi.toFixed(0)}</td></tr>`));
   view.querySelector("#chart-table").innerHTML = `<table><thead><tr><th>Date</th><th>Source</th><th class="num">${esc(name)}</th><th class="num">80% range</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
