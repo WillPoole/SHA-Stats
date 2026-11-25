@@ -1,6 +1,6 @@
 "use strict";
 
-const TEAM_TABS = ["roster", "players", "stats", "results", "contracts", "trades", "prospects", "drafts", "history", "hof"];
+const TEAM_TABS = ["roster", "players", "stats", "results", "contracts", "trades", "tactics", "prospects", "drafts", "history", "hof"];
 const tabHash = tab => (tab === "roster" ? "" : "/" + tab);
 
 function officialGp(club) { return D.teamGp?.[SEASON]?.[club] || 0; }
@@ -100,6 +100,7 @@ function renderTeams(club, tab = "roster", arg, arg2) {
   const hasDrafts = !!NHL_TEAMS[club] && draftValues().picks.some(x => x.club === club);
   if (["players", "results"].includes(tab) && !(NHL_TEAMS[club] && SEASONS.some(s => D.teamPlayers?.[s]?.[abbrOf(club)]))) tab = "roster";
   if ((["prospects", "history", "hof", "contracts", "trades"].includes(tab) && !NHL_TEAMS[club]) || (tab === "drafts" && !hasDrafts)) tab = "roster";
+  if (tab === "tactics" && !(NHL_TEAMS[club] && D.tactics?.clubs?.[club])) tab = "roster";
   const tbl = teamTable(SEASON), rec = tbl?.teams?.[abbr];
   const lgs = [...new Set(ps.map(p => p.lg).filter(Boolean))];
   const pay = ps.reduce((s, p) => s + salaryNum(p.sal), 0);
@@ -113,10 +114,10 @@ function renderTeams(club, tab = "roster", arg, arg2) {
       <span class="inline team-nav">${isNhl ? `<label class="inline">Team <select id="team-sel">${nhlClubs().map(c => `<option ${c === club ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>` : ""}<a href="#/teams">All teams</a></span>
     </div>
     ${tabBar("Team sections", [["roster", "Roster"], ...(hasPlayers ? [["players", "Player stats"]] : []), ...(statSeasons.length ? [["stats", "Team stats"]] : []),
-      ...(hasPlayers ? [["results", "Results"]] : []), ...(isNhl ? [["contracts", "Contracts"], ...(D.trades ? [["trades", "Trades"]] : []), ["prospects", "Prospects & picks"]] : []), ...(hasDrafts ? [["drafts", "Draft history"]] : []),
+      ...(hasPlayers ? [["results", "Results"]] : []), ...(isNhl ? [["contracts", "Contracts"], ...(D.trades ? [["trades", "Trades"]] : []), ...(D.tactics?.clubs?.[club] ? [["tactics", "Tactics"]] : []), ["prospects", "Prospects & picks"]] : []), ...(hasDrafts ? [["drafts", "Draft history"]] : []),
       ...(isNhl ? [["history", "History"], ["hof", "Hall of Fame"]] : [])], tab)}
   </div></section>
-  <div class="wrap page">${tab === "stats" ? teamStatsTab(club, abbr, statSeasons) : tab === "contracts" ? contractsTab(club, ps, arg) : tab === "trades" ? teamTradesTab() : tab === "prospects" ? prospectsTab(club) : tab === "drafts" ? teamDraftsTab(club) : tab === "players" ? teamPlayersTab(club, arg, arg2) : tab === "results" ? teamResultsTab(club, arg, arg2) : tab === "history" ? (nhlPeople(), teamHistoryTab(club)) : tab === "hof" ? (nhlPeople(), hallOfFameTab(club)) : rosterTab(club, ps, pay)}</div>`;
+  <div class="wrap page">${tab === "stats" ? teamStatsTab(club, abbr, statSeasons) : tab === "contracts" ? contractsTab(club, ps, arg) : tab === "trades" ? teamTradesTab() : tab === "tactics" ? tacticsTab(club) : tab === "prospects" ? prospectsTab(club) : tab === "drafts" ? teamDraftsTab(club) : tab === "players" ? teamPlayersTab(club, arg, arg2) : tab === "results" ? teamResultsTab(club, arg, arg2) : tab === "history" ? (nhlPeople(), teamHistoryTab(club)) : tab === "hof" ? (nhlPeople(), hallOfFameTab(club)) : rosterTab(club, ps, pay)}</div>`;
   view.querySelector("#team-sel")?.addEventListener("change", e => (location.hash = teamRoute(e.target.value) + tabHash(tab)));
   view.querySelectorAll(".ptabs [data-tab]").forEach(b => b.onclick = () => (location.hash = teamRoute(club) + tabHash(b.dataset.tab)));
   view.querySelector("#t-season")?.addEventListener("change", e => { SEASON = e.target.value; renderTeams(club, tab); });
@@ -349,6 +350,42 @@ function teamStatsTab(club, abbr, seasons) {
         <td class="num">${w}–${l}–${otl}</td><td class="num">${gf}</td><td class="num">${ga}</td><td class="num ${gf > ga ? "up" : gf < ga ? "down" : ""}"><b>${signed(gf - ga, 0)}</b></td>
         <td><span class="gbars" role="img" aria-label="${gf} goals for, ${ga} against"><i style="width:${(100 * gf / maxG).toFixed(1)}%"></i><i class="ga" style="width:${(100 * ga / maxG).toFixed(1)}%"></i></span></td></tr>`).join("")}
     </tbody></table></div><p class="sub pad">Top bar: goals for. Bottom bar: goals against.</p></section>`;
+}
+
+const TAC_GROUPS = [["Unit options", ["shift_length", "faceoffs", "playmaker"]],
+  ["Tactical settings", ["defensive_coverage", "mentality", "aggressiveness", "backchecking", "gap_control", "puck_pressure", "hitting", "tempo", "passing", "shooting", "dumping_the_puck"]],
+  ["Tactical systems", ["breakouts", "neutral_zone_offensive", "offensive_zone", "forecheck", "neutral_zone_defensive", "defensive_zone", "offensive_faceoffs", "defensive_faceoffs"]]];
+const TAC_LABEL = { neutral_zone_offensive: "Neutral zone (offence)", neutral_zone_defensive: "Neutral zone (defence)", dumping_the_puck: "Dumping the puck" };
+const tacLabel = k => TAC_LABEL[k] || (k[0].toUpperCase() + k.slice(1).replace(/_/g, " "));
+const TAC_SITS = [["Even strength", /^\d/], ["Power play 5 on 4", /^PP \(5vs4\)/], ["Power play 5 on 3", /^PP \(5vs3\)/],
+  ["Penalty kill 4 on 5", /^PK \(4vs5\)/], ["Penalty kill 3 on 5", /^PK \(3vs5\)/], ["4 on 4", /^ES \(4vs4\)/]];
+const tacShort = u => u.replace(/^(\d)\w\w Line$/, "L$1").replace(/^(PP|PK|ES) \(\dvs\d\) (\d)$/, "$2");
+const TAC_RATINGS = ["Offense", "Defense", "Speed", "Skill", "Toughness"];
+function tacticsTab(club) {
+  const T = D.tactics.clubs[club], idx = Object.fromEntries(D.tactics.settings.map((k, i) => [k, i]));
+  const sits = TAC_SITS.map(([name, re]) => [name, T.units.filter(u => re.test(u[0]))]).filter(([, us]) => us.length);
+  const units = sits.flatMap(([, us]) => us);
+  const who = ([no, name, k, pos]) => `${esc(no)} ${k && hasPage(k) ? `<a href="${route(k)}">${esc(name)}</a>` : esc(name)}${pos ? ` <span class="muted small">${esc(pos)}</span>` : ""}`;
+  const rows = TAC_GROUPS.map(([title, keys]) => `<tr class="tac-group"><th colspan="${units.length + 1}">${title}</th></tr>`
+    + keys.filter(k => k in idx).map(k => `<tr><th scope="row">${tacLabel(k)}</th>${sits.map(([, us]) => us.map((u, j) => {
+      const v = u[2][idx[k]], first = us[0][2][idx[k]];
+      return `<td class="${j === 0 ? "tac-first" : ""}${j && v !== first ? " tac-diff" : ""}">${v && v !== "-" ? esc(v) : dash}</td>`;
+    }).join("")).join("")}</tr>`).join("")).join("");
+  const bars = r => TAC_RATINGS.map((name, i) => `<span title="${name}: ${r[i] ?? "?"} boxes on the game's bar"><small>${name.slice(0, 3)}</small><b>${r[i] ?? "–"}</b></span>`).join("");
+  return `<div class="cardbar"><div><h2 class="flat">Tactics in the last game</h2>
+      <p class="sub">${esc(club)}'s lineup and unit tactics against ${esc(T.opp)}, as the game showed them in the ${fmtDate(T.d)} snapshot.
+      Other clubs can only see Set Lines and Unit Tactics: Team Tactics and Personal Tactics stay hidden.</p></div></div>
+    <section class="card-box flush"><h3 class="box-h">Unit settings</h3>
+      <div class="tablewrap"><table class="tac-table"><thead>
+        <tr><th></th>${sits.map(([name, us]) => `<th colspan="${us.length}" class="tac-sit">${name}</th>`).join("")}</tr>
+        <tr><th>Setting</th>${sits.map(([, us]) => us.map((u, j) => `<th class="${j === 0 ? "tac-first" : ""}" title="${esc(u[0])}">${esc(tacShort(u[0]))}</th>`).join("")).join("")}</tr>
+      </thead><tbody>${rows}</tbody></table></div>
+      <p class="sub pad">Bold: a setting that differs from the first unit of the same situation. A dash means not set.</p></section>
+    ${sits.map(([name, us]) => `<section class="card-box"><h3 class="box-h">${name}</h3><div class="tac-units">${us.map(u => `<div class="tac-unit">
+      <div class="tac-head"><b>${esc(u[0])}</b><span class="tac-bars" aria-label="Unit ratings">${bars(u[1])}</span></div>
+      <ul>${u[3].map(x => `<li>${who(x)}</li>`).join("") || `<li class="muted">No lineup shown</li>`}</ul></div>`).join("")}</div></section>`).join("")}
+    ${T.goalies?.length ? `<p class="sub">Goalies on Set Lines: ${T.goalies.map(([l, n]) => `${esc(l)} ${esc(n)}`).join(", ")} (the game's letters).</p>` : ""}
+    <p class="sub">Ratings are the game's unit bars (Offense, Defense, Speed, Skill, Toughness), counted in boxes. They describe the players in the unit, not the tactics.</p>`;
 }
 
 const TPS = { mode: "R", sort: "p", dir: -1, view: "basic" };

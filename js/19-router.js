@@ -31,6 +31,7 @@ function render() {
   else if (h === "/playoffs" || raw.startsWith("/playoffs/")) renderPlayoffs(raw.slice(10));
   else if (h === "/expiring" || raw.startsWith("/expiring/")) { const [o, pos] = raw.slice(10).split("/"); renderExpiring(o, pos); }
   else if ((h === "/freeagents" || raw.startsWith("/freeagents/")) && typeof renderFreeAgents === "function") renderFreeAgents(raw.slice(12));
+  else if ((h === "/snapshots" || raw.startsWith("/snapshots/")) && typeof renderSnapshots === "function") renderSnapshots(raw.slice(11));
   else if (h === "/gms" || raw.startsWith("/gms/")) renderGms(raw.slice(5));
   else if (raw.startsWith("/gm/")) renderGm(decodePart(raw.slice(4)));
   else if (h === "/h2h") renderH2H();
@@ -52,6 +53,7 @@ if (!NO_DATA) {
   document.getElementById("navmenu-league")?.insertAdjacentHTML("beforeend", leagueNames().map(l => `<a href="${leagueRoute(l)}">${esc(l)}</a>`).join(""));
   if (snap) snap.textContent = `· ${D.title} · ${D.players.length.toLocaleString()} players · snapshot ${fmtDate(D.dates.at(-1))}`;
   if (!D.gms) document.querySelectorAll('.top nav a[data-nav="gms"]').forEach(a => a.remove());
+  if (!D.snapRead) document.querySelectorAll('.top nav a[data-nav="snapshots"]').forEach(a => a.remove());
   addEventListener("hashchange", onHashChange);
   render();
 }

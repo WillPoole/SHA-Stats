@@ -52,6 +52,7 @@ function renderPlayer(key, tab = "overview") {
         ${D.attrs.map((a, i) => p.h.some(h => h[i + 2] != null) ? `<option value="${i}">${esc(a.split(": ")[1])}</option>` : "").join("")}
       </select></label>
     </div>
+    ${""}
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
     <details><summary>Data table</summary><div class="tablewrap" id="chart-table"></div></details>
@@ -275,6 +276,7 @@ function contractPanel(p) {
   return `<div class="panel contractp"><h2>Contract</h2><div class="dealcards">${curCard}${nextCard}${rsCard}</div>${""}${chart}${grid}${details}${hist}
     <p class="small muted">${source}${fa?.t.endsWith("*") ? " * = estimated from his age at expiry." : ""}${link}</p></div>`;
 }
+
 let composePlayer;
 
 let drawMini;
